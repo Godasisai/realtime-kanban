@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Julley Collaborative Kanban | Multi-Tenant Architecture</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#151e32',
+              950: '#070d19',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- ==================== Top Navigation Bar ==================== -->
+  <header class="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 sm:px-6 z-20 flex-shrink-0">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </div>
+        <div>
+          <span class="font-bold text-base tracking-tight text-white flex items-center gap-1.5">
+            Julley Kanban
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">Enterprise</span>
+          </span>
+          <span class="text-[10px] text-slate-400 font-mono block -mt-0.5">Multi-Org &bull; Multi-Tenant</span>
+        </div>
+      </div>
+
+      <div class="h-6 w-px bg-slate-800 hidden md:block"></div>
+
+      <!-- Organization Selector -->
+      <div class="flex items-center gap-2">
+        <label for="select-org" class="text-xs text-slate-400 font-medium hidden lg:inline">Org:</label>
+        <select id="select-org" class="bg-slate-800 border border-slate-700/80 rounded-lg text-xs font-semibold px-2.5 py-1.5 text-slate-200 hover:border-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer transition-colors max-w-[150px] truncate"></select>
+      </div>
+
+      <!-- Tenant (Branch) Switcher -->
+      <div class="flex items-center gap-2">
+        <label for="select-tenant" class="text-xs text-slate-400 font-medium hidden lg:inline">Branch:</label>
+        <select id="select-tenant" class="bg-slate-800 border border-slate-700/80 rounded-lg text-xs font-semibold px-2.5 py-1.5 text-indigo-300 hover:border-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer transition-colors max-w-[170px] truncate"></select>
+      </div>
+
+      <!-- Board Selector -->
+      <div class="flex items-center gap-2">
+        <label for="select-board" class="text-xs text-slate-400 font-medium hidden xl:inline">Board:</label>
+        <select id="select-board" class="bg-slate-800 border border-slate-700/80 rounded-lg text-xs font-semibold px-2.5 py-1.5 text-slate-200 hover:border-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer transition-colors max-w-[180px] truncate"></select>
+        <button id="btn-new-board" title="Create New Board in this branch" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right Controls: Presence, Undo/Redo, Persona Switcher -->
+    <div class="flex items-center gap-3">
+      <!-- Live Sync Indicator -->
+      <div id="connection-status" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 shadow-sm">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="text-[11px] font-semibold text-emerald-400 font-mono">Live Sync</span>
+      </div>
+
+      <!-- Undo / Redo -->
+      <div class="flex items-center bg-slate-800/80 rounded-lg border border-slate-700/80 p-0.5">
+        <button id="btn-undo" title="Undo (Ctrl+Z)" disabled class="p-1.5 rounded hover:bg-slate-700 text-slate-300 transition-colors opacity-40 cursor-not-allowed">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l6-6m-6 6l6 6"></path></svg>
+        </button>
+        <button id="btn-redo" title="Redo (Ctrl+Y)" disabled class="p-1.5 rounded hover:bg-slate-700 text-slate-300 transition-colors opacity-40 cursor-not-allowed">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a5 5 0 00-5 5v2m15-7l-6-6m6 6l-6 6"></path></svg>
+        </button>
+      </div>
+
+      <!-- Presence Avatar Stack -->
+      <div id="presence-avatars" class="flex items-center"></div>
+
+      <!-- Activity Log Button -->
+      <button id="btn-activity-log" title="Tenant Activity Stream" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white transition-colors relative">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      </button>
+
+      <!-- Architecture & ER Diagram Button -->
+      <button id="btn-view-er" title="View Database ER & Architecture" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-xs font-semibold text-indigo-300 hover:text-white flex items-center gap-1.5 transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 5h16M10 4v16"></path></svg>
+        <span class="hidden md:inline">Architecture &amp; ER</span>
+      </button>
+
+      <!-- Persona / Role Quick Switcher -->
+      <div class="relative group">
+        <button id="user-profile-badge" class="focus:outline-none"></button>
+        <div class="absolute right-0 mt-1 w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-2 hidden group-hover:block hover:block z-50">
+          <div class="px-3 py-1.5 text-[11px] font-mono text-slate-400 uppercase tracking-wider border-b border-slate-800">
+            Switch Demo Persona (Test RBAC)
+          </div>
+          <button onclick="App.switchPersona('sai@julley.com')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+            <div>
+              <div class="font-semibold text-slate-200">Sai Ammanna Naidu</div>
+              <div class="text-[10px] text-indigo-400">Org Admin &bull; Julley Online</div>
+            </div>
+          </button>
+          <button onclick="App.switchPersona('priya@julley.com')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
+            <div>
+              <div class="font-semibold text-slate-200">Priya Sharma</div>
+              <div class="text-[10px] text-pink-400">Tenant Admin &bull; Bangalore HQ</div>
+            </div>
+          </button>
+          <button onclick="App.switchPersona('rahul@julley.com')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <div>
+              <div class="font-semibold text-slate-200">Rahul Varma</div>
+              <div class="text-[10px] text-emerald-400">Member &bull; Bangalore HQ</div>
+            </div>
+          </button>
+          <button onclick="App.switchPersona('ananya@julley.com')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <div>
+              <div class="font-semibold text-slate-200">Ananya Reddy</div>
+              <div class="text-[10px] text-amber-400">Tenant Admin &bull; Hyderabad Hub</div>
+            </div>
+          </button>
+          <button onclick="App.switchPersona('john@acme.com')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex items-center gap-2 border-t border-slate-800/80">
+            <span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+            <div>
+              <div class="font-semibold text-slate-200">John Doe</div>
+              <div class="text-[10px] text-slate-400">External Org Admin &bull; Acme Cloud</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== Filter & Action Sub-Header ==================== -->
+  <div class="h-14 bg-slate-900/60 border-b border-slate-800/80 flex items-center justify-between px-6 flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <h2 id="board-title" class="font-bold text-base text-slate-100 tracking-tight">Loading Board...</h2>
+      <span class="text-slate-600">&bull;</span>
+      <p id="board-desc" class="text-xs text-slate-400 truncate max-w-sm hidden sm:inline"></p>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <svg class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <input id="search-input" type="text" placeholder="Filter tasks or tags..." class="pl-8 pr-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700/70 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44 sm:w-60 transition-all" />
+      </div>
+
+      <select id="priority-filter" class="bg-slate-800/90 border border-slate-700/70 rounded-lg text-xs font-medium px-2.5 py-1.5 text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer">
+        <option value="all">All Priorities</option>
+        <option value="urgent">Urgent</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+
+      <button id="btn-new-column" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        <span>Add Column</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== Kanban Board Columns Container ==================== -->
+  <main class="flex-1 overflow-x-auto p-6 flex gap-6 items-start" id="board-columns-container">
+    <!-- Populated dynamically by App.renderBoard() -->
+  </main>
+
+  <!-- ==================== Task Detail Slide-over Drawer ==================== -->
+  <div id="drawer-backdrop" onclick="App.closeTaskDetailDrawer()" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-40 opacity-0 pointer-events-none transition-opacity duration-200"></div>
+  <aside id="task-detail-drawer" class="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-slate-900 border-l border-slate-800 shadow-2xl z-50 transform translate-x-full transition-transform duration-250 ease-out flex flex-col">
+    <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-850">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-mono font-bold uppercase text-indigo-400">Task Details</span>
+        <span id="detail-version-badge" class="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-800 text-slate-400 border border-slate-700/60" title="Optimistic Concurrency Control Version">v1</span>
+      </div>
+      <button onclick="App.closeTaskDetailDrawer()" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-6 space-y-5">
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Title</label>
+        <input id="detail-title" type="text" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Priority</label>
+          <select id="detail-priority" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Assignee</label>
+          <select id="detail-assignee" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Description</label>
+        <textarea id="detail-desc" rows="4" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"></textarea>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Tags (comma-separated)</label>
+        <input id="detail-tags" type="text" placeholder="e.g. Backend, Security, OCC" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+
+      <!-- Activity History Stream for this task -->
+      <div class="pt-4 border-t border-slate-800">
+        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Task Audit Log</h4>
+        <div id="task-activity-list" class="space-y-2"></div>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-slate-800 bg-slate-850 flex items-center justify-between">
+      <button id="btn-delete-task" class="px-3 py-2 rounded-lg hover:bg-rose-500/10 text-rose-400 hover:text-rose-300 text-xs font-semibold transition-colors flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        Delete
+      </button>
+
+      <div class="flex items-center gap-2">
+        <button onclick="App.closeTaskDetailDrawer()" class="px-3.5 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors">
+          Cancel
+        </button>
+        <button id="btn-save-task" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-colors">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==================== OCC Conflict Resolution Modal ==================== -->
+  <div id="conflict-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-2xl bg-slate-900 border border-rose-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div class="p-5 bg-rose-500/10 border-b border-rose-500/30 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-rose-300">Concurrent Edit Conflict (Optimistic Concurrency Control)</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Another collaborator submitted edits to this task while you were viewing it. Choose how you would like to resolve the differences.</p>
+        </div>
+      </div>
+
+      <div class="p-6 overflow-y-auto max-h-[60vh]">
+        <div id="conflict-diff-table" class="rounded-xl border border-slate-800 overflow-hidden"></div>
+      </div>
+
+      <div class="p-4 bg-slate-850 border-t border-slate-800 flex items-center justify-end gap-2.5">
+        <button id="btn-conflict-server" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors">
+          Keep Server Version
+        </button>
+        <button id="btn-conflict-merge" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors">
+          Merge Changes
+        </button>
+        <button id="btn-conflict-overwrite" class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md transition-colors">
+          Overwrite with My Changes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Tenant Activity Stream Drawer ==================== -->
+  <div id="activity-backdrop" onclick="App.closeActivityDrawer()" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-40 opacity-0 pointer-events-none transition-opacity duration-200"></div>
+  <aside id="activity-log-drawer" class="fixed right-0 top-0 bottom-0 w-full max-w-md bg-slate-900 border-l border-slate-800 shadow-2xl z-50 transform translate-x-full transition-transform duration-250 ease-out flex flex-col">
+    <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-850">
+      <div>
+        <h3 class="font-bold text-sm text-slate-100">Tenant Activity Stream</h3>
+        <span class="text-[10px] text-slate-400 font-mono">Scoped strictly by Tenant ID</span>
+      </div>
+      <button onclick="App.closeActivityDrawer()" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+    <div id="tenant-activity-stream" class="flex-1 overflow-y-auto divide-y divide-slate-800/80"></div>
+  </aside>
+
+  <!-- ==================== Architecture & ER Diagram Modal ==================== -->
+  <div id="er-diagram-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-850">
+        <div>
+          <h3 class="font-bold text-base text-white">Database Schema &amp; Multi-Tenant Hierarchy Architecture</h3>
+          <p class="text-xs text-indigo-400 font-mono">Julley Online Collaborative Platform &bull; Data Isolation &amp; OCC Modeling</p>
+        </div>
+        <button onclick="App.closeModal('er-diagram-modal')" class="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-6 text-xs text-slate-300">
+        <!-- Tenancy Model -->
+        <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
+          <h4 class="font-bold text-sm text-indigo-300 uppercase tracking-wider">Multi-Tenant Hierarchy</h4>
+          <p class="leading-relaxed">
+            <strong>Organization &rarr; Tenants (Branches) &rarr; Boards &rarr; Columns &rarr; Tasks</strong>.<br />
+            Data isolation is enforced at the database level by partitioning business entities with <code>tenant_id</code> foreign keys and indexes. Cross-tenant queries are blocked via authenticated middleware dependencies that verify user memberships.
+          </p>
+        </div>
+
+        <!-- ER Schema Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl bg-slate-950 border border-slate-800">
+            <h5 class="font-mono font-bold text-emerald-400 mb-2">TABLE organizations</h5>
+            <ul class="space-y-1 font-mono text-[11px] text-slate-400">
+              <li><strong class="text-slate-200">id</strong> VARCHAR(36) [PK, UUID]</li>
+              <li><strong class="text-slate-200">name</strong> VARCHAR(100)</li>
+              <li><strong class="text-slate-200">slug</strong> VARCHAR(100) [UNIQUE]</li>
+              <li>created_at, updated_at TIMESTAMP</li>
+            </ul>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-950 border border-slate-800">
+            <h5 class="font-mono font-bold text-emerald-400 mb-2">TABLE tenants (Branches)</h5>
+            <ul class="space-y-1 font-mono text-[11px] text-slate-400">
+              <li><strong class="text-slate-200">id</strong> VARCHAR(36) [PK, UUID]</li>
+              <li><strong class="text-indigo-300">org_id</strong> VARCHAR(36) [FK -> organizations.id]</li>
+              <li><strong class="text-slate-200">name</strong> VARCHAR(100)</li>
+              <li><strong class="text-slate-200">slug</strong> VARCHAR(100)</li>
+              <li>location VARCHAR(100)</li>
+              <li>created_at, updated_at TIMESTAMP</li>
+            </ul>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-950 border border-slate-800">
+            <h5 class="font-mono font-bold text-emerald-400 mb-2">TABLE memberships (RBAC)</h5>
+            <ul class="space-y-1 font-mono text-[11px] text-slate-400">
+              <li><strong class="text-slate-200">id</strong> VARCHAR(36) [PK]</li>
+              <li><strong class="text-indigo-300">user_id</strong> VARCHAR(36) [FK -> users.id]</li>
+              <li><strong class="text-indigo-300">org_id</strong> VARCHAR(36) [FK -> organizations.id]</li>
+              <li><strong class="text-indigo-300">tenant_id</strong> VARCHAR(36) [FK -> tenants.id, NULLABLE]</li>
+              <li><strong class="text-amber-400">role</strong> VARCHAR(30) [org_admin, tenant_admin, member]</li>
+            </ul>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-950 border border-slate-800">
+            <h5 class="font-mono font-bold text-emerald-400 mb-2">TABLE tasks (OCC &amp; Fractional Indexing)</h5>
+            <ul class="space-y-1 font-mono text-[11px] text-slate-400">
+              <li><strong class="text-slate-200">id</strong> VARCHAR(36) [PK]</li>
+              <li><strong class="text-indigo-300">tenant_id</strong> VARCHAR(36) [FK -> tenants.id, INDEX]</li>
+              <li><strong class="text-indigo-300">board_id</strong> VARCHAR(36) [FK -> boards.id, INDEX]</li>
+              <li><strong class="text-indigo-300">column_id</strong> VARCHAR(36) [FK -> columns.id, INDEX]</li>
+              <li><strong class="text-slate-200">title</strong> VARCHAR(200)</li>
+              <li><strong class="text-cyan-400">order</strong> FLOAT [Fractional Index: O(1) DND]</li>
+              <li><strong class="text-rose-400">version</strong> INT [OCC Version for 409 Conflict]</li>
+              <li>assignee_id VARCHAR(36) [FK -> users.id]</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Concurrency & Drag-Drop Strategy -->
+        <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
+          <h4 class="font-bold text-sm text-cyan-300 uppercase tracking-wider">Advanced Concurrency &amp; Drag-and-Drop</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <strong class="text-white">1. Optimistic Concurrency Control (OCC):</strong>
+              <p class="text-slate-400 mt-1">Each task has an atomic <code>version</code> integer. Updates send <code>expected_version</code>. If mismatched, the server rejects with HTTP 409 Conflict and provides the latest snapshot for 3-way resolution.</p>
+            </div>
+            <div>
+              <strong class="text-white">2. Fractional Indexing (LexoRank):</strong>
+              <p class="text-slate-400 mt-1">Reordering computes midpoint <code>(prev + next) / 2.0</code>. Only the moved task row is updated—zero mass table locks or drag-drop reordering conflicts!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 bg-slate-850 border-t border-slate-800 flex justify-end">
+        <button onclick="App.closeModal('er-diagram-modal')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors">
+          Close Diagram
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== New Task Modal ==================== -->
+  <div id="new-task-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+      <h3 class="font-bold text-base text-white mb-4">Create New Task</h3>
+      <form id="new-task-form" class="space-y-4">
+        <input type="hidden" id="new-task-col-id" />
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Title</label>
+          <input id="new-task-title" type="text" required placeholder="e.g., Audit SQL query plans" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Priority</label>
+          <select id="new-task-priority" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="medium">Medium</option>
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Description</label>
+          <textarea id="new-task-desc" rows="3" placeholder="Optional details..." class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="App.closeModal('new-task-modal')" class="px-3.5 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors">Create Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== New Column Modal ==================== -->
+  <div id="new-column-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+      <h3 class="font-bold text-base text-white mb-4">Add Board Column</h3>
+      <form id="new-column-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Column Title</label>
+          <input id="new-col-title" type="text" required placeholder="e.g. Quality Assurance" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">WIP Limit (0 = Unlimited)</label>
+          <input id="new-col-wip" type="number" min="0" value="0" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="App.closeModal('new-column-modal')" class="px-3.5 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors">Add Column</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== New Board Modal ==================== -->
+  <div id="new-board-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6">
+      <h3 class="font-bold text-base text-white mb-4">Create Branch Board</h3>
+      <form id="new-board-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Board Name</label>
+          <input id="new-board-name" type="text" required placeholder="e.g. Q4 Growth Roadmap" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Description</label>
+          <textarea id="new-board-desc" rows="2" placeholder="Optional purpose..." class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Accent Color</label>
+          <input id="new-board-color" type="color" value="#4f46e5" class="w-full h-9 rounded bg-slate-800 border border-slate-700 cursor-pointer" />
+        </div>
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="App.closeModal('new-board-modal')" class="px-3.5 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors">Create Board</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md pointer-events-none"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/ws.js"></script>
+  <script src="/static/js/undo.js"></script>
+  <script src="/static/js/state.js"></script>
+  <script src="/static/js/dnd.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
